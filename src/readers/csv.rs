@@ -85,20 +85,18 @@ impl FileReader for CsvReader {
     /// - "true" and "false" will be converted to JSON Booleans
     /// - All other values will remain as JSON Strings
     fn read_item(&mut self) -> Option<Result<Value, ReaderError>> {
-        if self._reader.is_none() {
+        if self._reader.is_none() && !self._initialized {
             if let Err(e) = self.init_reader() {
-                if self._initialized {
-                    return None;
-                } else {
-                    self._initialized = true;
-                    tracing::error!(
-                        "CsvReader initialization error : {:?} - Config : {:?}",
-                        e,
-                        self
-                    );
-                    return Some(Err(e));
-                }
+                self._initialized = true;
+                tracing::error!(
+                    "CsvReader initialization error : {:?} - Config : {:?}",
+                    e,
+                    self
+                );
+                return Some(Err(e));
             }
+        } else if self._reader.is_none() && self._initialized {
+            return None;
         }
 
         match &mut self._reader {
@@ -138,7 +136,6 @@ mod tests {
         while let Some(item) = reader.read_item() {
             results.push(item);
         }
-        println!("{:?}", results);
 
         assert_eq!(results.len(), 100);
 

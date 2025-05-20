@@ -1,9 +1,12 @@
 mod csv;
 mod errors;
+mod jsonstream;
 
 use serde_json::Value;
 
+pub use csv::CsvReader;
 pub use errors::ReaderError;
+pub use jsonstream::JsonStreamReader;
 
 /// Trait defining the functionalities of a file reader.
 ///
