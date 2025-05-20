@@ -11,7 +11,7 @@ use super::{FileReader, ReaderError};
 
 /// A struct representing a JSON Stream reader.
 ///
-/// This reader will expect json objects splited by new lines.
+/// This reader will expect json objects split by new lines.
 #[derive(Serialize, Deserialize)]
 pub struct JsonStreamReader {
     /// Path for the file to read
@@ -28,10 +28,6 @@ pub struct JsonStreamReader {
 
 impl JsonStreamReader {
     /// Initializes the `JsonStreamReader` by opening the file and creating a stream iterator
-    ///
-    /// # Arguments
-    ///
-    /// * `_metrics_provider` - A thread-safe reference to a metrics provider, which is not used in this implementation.
     ///
     /// # Returns
     ///
@@ -65,17 +61,13 @@ impl FileReader for JsonStreamReader {
     fn read_item(&mut self) -> Option<Result<Value, ReaderError>> {
         if self._iterator.is_none() {
             if let Err(e) = self.init() {
-                if self._initialized {
-                    return None;
-                } else {
-                    self._initialized = true;
-                    tracing::error!(
-                        "JsonStreamReader initialization error : {:?} - file path : {}",
-                        e,
-                        self.file_path
-                    );
-                    return Some(Err(e));
-                }
+                self._initialized = true;
+                tracing::error!(
+                    "JsonStreamReader initialization error : {:?} - file path : {}",
+                    e,
+                    self.file_path
+                );
+                return Some(Err(e));
             }
         }
 
@@ -85,9 +77,9 @@ impl FileReader for JsonStreamReader {
             )));
         };
 
-        match iterator.clone().lock().unwrap().next() {
-            Some(result) => Some(result.map_err(|e| e.into())),
-            None => None,
+        match iterator.lock() {
+            Ok(mut guard) => guard.next().map(|result| result.map_err(|e| e.into())),
+            Err(_) => Some(Err(ReaderError::InitializationError("Mutex lock poisoned"))),
         }
     }
 }
@@ -169,7 +161,19 @@ mod tests {
         let item: Result<Value, ReaderError> =
             reader.read_item().expect("should have one invalid record");
 
-        println!("{:?}", item);
         assert!(item.is_err())
+    }
+
+    #[test]
+    fn test_json_file_does_not_exists() {
+        // Create an instance of JsonStreamReader with the test file path
+        let mut reader = JsonStreamReader {
+            file_path: String::from("/invalid/file/path"),
+            _iterator: None,
+            _initialized: false,
+        };
+
+        // Initialize the reader
+        assert!(reader.init().is_err(), "init error expected");
     }
 }
