@@ -108,7 +108,9 @@ impl FileReader for CsvReader {
             }),
             None => {
                 tracing::error!("Cannot initialize reader");
-                None
+                Some(Err(ReaderError::InitializationError(
+                    "Failed to initialize reader",
+                )))
             }
         }
     }
