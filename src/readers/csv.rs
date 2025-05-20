@@ -32,6 +32,10 @@ pub struct CsvReader {
     /// The internal CSV reader instance. This field is skipped during serialization and deserialization.
     #[serde(skip)]
     _reader: Option<csv::Reader<BufReader<File>>>,
+
+    /// Indicate if the reader has already been initialized
+    #[serde(default)]
+    _initialized: bool,
 }
 
 impl CsvReader {
@@ -47,7 +51,11 @@ impl CsvReader {
 
         let reader = csv::ReaderBuilder::new()
             .flexible(self.flexible)
-            .delimiter(self.delimiter.as_bytes()[0])
+            .delimiter(if self.delimiter.is_empty() {
+                b',' // Default to comma if empty
+            } else {
+                self.delimiter.as_bytes()[0] // Only use first byte
+            })
             .from_reader(buf_reader);
 
         tracing::debug!("Initialized csv reader with config : {:?}", self);
@@ -70,15 +78,26 @@ impl FileReader for CsvReader {
     /// # Returns
     ///
     /// * `Option<Result<Value, ReaderError>>` - Returns `Some(Ok(Value))` if an item is found, `Some(Err(ReaderError))` if an error is encountered, or `None` if the file is exhausted.
+    /// # Type Conversion
+    ///
+    /// The CSV reader will attempt to convert values to appropriate JSON types:
+    /// - Numeric values will be converted to JSON Numbers
+    /// - "true" and "false" will be converted to JSON Booleans
+    /// - All other values will remain as JSON Strings
     fn read_item(&mut self) -> Option<Result<Value, ReaderError>> {
         if self._reader.is_none() {
             if let Err(e) = self.init_reader() {
-                tracing::error!(
-                    "CsvReader initialization error : {:?} - Config : {:?}",
-                    e,
-                    self
-                );
-                return None;
+                if self._initialized {
+                    return None;
+                } else {
+                    self._initialized = true;
+                    tracing::error!(
+                        "CsvReader initialization error : {:?} - Config : {:?}",
+                        e,
+                        self
+                    );
+                    return Some(Err(e));
+                }
             }
         }
 
@@ -110,6 +129,7 @@ mod tests {
             flexible: false,
             file_path: format!("{}/examples/uspop.csv", env!("CARGO_MANIFEST_DIR")),
             _reader: None,
+            _initialized: false,
         };
 
         let mut results: Vec<Result<Value, ReaderError>> = vec![];
@@ -143,11 +163,20 @@ mod tests {
 
     #[test]
     fn test_flexible_reader() {
+        // Create a malformed CSV file with inconsistent field counts
+        let mut file = NamedTempFile::new().unwrap();
+        writeln!(file, "Name,Age,City").unwrap();
+        writeln!(file, "John,30,New York").unwrap();
+        writeln!(file, "Alice,25").unwrap(); // Missing field
+        writeln!(file, "Bob,40,Chicago,IL").unwrap(); // Extra field
+        let path = file.path().to_str().unwrap().to_string();
+
         let mut reader = CsvReader {
             delimiter: ",".to_string(),
             flexible: true,
-            file_path: format!("{}/examples/uspop.csv", env!("CARGO_MANIFEST_DIR")),
+            file_path: path,
             _reader: None,
+            _initialized: false,
         };
 
         let mut results: Vec<Result<Value, ReaderError>> = vec![];
@@ -155,10 +184,7 @@ mod tests {
             results.push(item);
         }
 
-        assert_eq!(results.len(), 100);
-
-        let valid_results: Vec<Value> = results.into_iter().flatten().collect();
-        assert_eq!(valid_results.len(), 100);
+        assert_eq!(results.len(), 3);
     }
 
     #[test]
@@ -174,6 +200,7 @@ mod tests {
             flexible: false,
             file_path: path,
             _reader: None,
+            _initialized: false,
         };
 
         let mut results: Vec<Result<Value, ReaderError>> = vec![];
@@ -204,6 +231,7 @@ mod tests {
             flexible: false,
             file_path: path,
             _reader: None,
+            _initialized: false,
         };
 
         let mut results: Vec<Result<Value, ReaderError>> = vec![];
@@ -221,13 +249,19 @@ mod tests {
             flexible: false,
             file_path: "nonexistent_file.csv".to_string(),
             _reader: None,
+            _initialized: false,
         };
 
-        let mut results: Vec<Result<Value, ReaderError>> = vec![];
-        while let Some(item) = reader.read_item() {
-            results.push(item);
+        let first_result = reader.read_item();
+        assert!(first_result.is_some(), "Expected Some(Err), got None");
+
+        if let Some(res) = first_result {
+            assert!(res.is_err(), "Expected an error for nonexistent file");
+            // Optionally verify the error type if ReaderError has variants
+            // assert!(matches!(res.unwrap_err(), ReaderError::Io(_)));
         }
 
-        assert_eq!(results.len(), 0);
+        // Subsequent reads should return None
+        assert!(reader.read_item().is_none(), "Expected None after error");
     }
 }

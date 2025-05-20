@@ -8,6 +8,6 @@ pub enum ReaderError {
     JsonError(#[from] serde_json::Error),
     #[error(transparent)]
     IoError(#[from] std::io::Error),
-    #[error("Reader error : {0}")]
+    #[error("Reader error: {0}")]
     InitializationError(&'static str),
 }
