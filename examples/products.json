@@ -1,0 +1,12 @@
+[
+  {
+    "name": "My product in array 1",
+    "price": 10.5,
+    "inStock": true,
+  },
+  {
+    "name": "My product in array 2",
+    "price": 20.0,
+    "inStock": false,
+  }
+]
