@@ -7,8 +7,14 @@ use super::{FileReader, ReaderError};
 
 /// Default delimiter function for the CSV reader.
 ///
-/// Returns a comma (`,`) as the default delimiter.
-fn default_delimiter() -> String {
+/// Returns the default delimiter string for CSV parsing, which is a comma (`,`).
+///
+/// # Examples
+///
+/// ```
+/// let delim = default_delimiter();
+/// assert_eq!(delim, ",");
+/// ```fn default_delimiter() -> String {
     ",".to_string()
 }
 
@@ -41,8 +47,21 @@ impl CsvReader {
     ///
     /// # Returns
     ///
-    /// * `Result<(), ReaderError>` - Returns `Ok(())` if the reader is successfully initialized, or an error if the file cannot be opened.
-    fn init_reader(&mut self) -> Result<(), ReaderError> {
+    /// Initializes the internal CSV reader using the configured file path, delimiter, and flexibility settings.
+    ///
+    /// Returns `Ok(())` if the reader is successfully initialized, or a `ReaderError` if the file cannot be opened or the reader cannot be created.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut csv_reader = CsvReader {
+    ///     delimiter: ",".to_string(),
+    ///     flexible: false,
+    ///     file_path: "data.csv".to_string(),
+    ///     _reader: None,
+    /// };
+    /// assert!(csv_reader.init_reader().is_ok());
+    /// ```    fn init_reader(&mut self) -> Result<(), ReaderError> {
         let buf_reader = BufReader::new(File::open(&self.file_path)?);
 
         let reader = csv::ReaderBuilder::new()
@@ -69,8 +88,24 @@ impl FileReader for CsvReader {
     ///
     /// # Returns
     ///
-    /// * `Option<Result<Value, ReaderError>>` - Returns `Some(Ok(Value))` if an item is found, `Some(Err(ReaderError))` if an error is encountered, or `None` if the file is exhausted.
-    fn read_item(&mut self) -> Option<Result<Value, ReaderError>> {
+    /// Reads the next record from the CSV file and returns it as a JSON object.
+    ///
+    /// Returns `Some(Ok(Value))` for each successfully deserialized CSV record, `Some(Err(ReaderError))` if a deserialization error occurs, or `None` when no more records are available or if the reader could not be initialized.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut reader = CsvReader {
+    ///     delimiter: ",".to_string(),
+    ///     flexible: false,
+    ///     file_path: "data.csv".to_string(),
+    ///     _reader: None,
+    /// };
+    /// while let Some(result) = reader.read_item() {
+    ///     let value = result.unwrap();
+    ///     // Process value as serde_json::Value
+    /// }
+    /// ```    fn read_item(&mut self) -> Option<Result<Value, ReaderError>> {
         if self._reader.is_none() {
             if let Err(e) = self.init_reader() {
                 tracing::error!(
@@ -196,6 +231,14 @@ mod tests {
     }
 
     #[test]
+    /// Tests that reading from an empty CSV file returns no records.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// test_empty_file();
+    /// // The test passes if no records are returned from the empty file.
+    /// ```
     fn test_empty_file() {
         let file = NamedTempFile::new().unwrap();
         let path = file.path().to_str().unwrap().to_string();
